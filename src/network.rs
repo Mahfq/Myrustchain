@@ -1,4 +1,4 @@
-use crate::blockchain::{Block, Blockchain};
+use crate::models::{Block, Blockchain};
 use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
@@ -24,7 +24,7 @@ impl Node {
         }
     }
 
-pub fn receive_message(&mut self, msg: ConsensusMessage) -> Option<ConsensusMessage> {
+    pub fn receive_message(&mut self, msg: ConsensusMessage, quorum: usize) -> Option<ConsensusMessage> {
         self.messages_received.push(msg.clone());
 
         match msg {
@@ -51,7 +51,7 @@ pub fn receive_message(&mut self, msg: ConsensusMessage) -> Option<ConsensusMess
             },
 
             ConsensusMessage::Commit { block_hash, .. } => {
-                if self.count_unique_votes(&block_hash, "commit") >= 3 {
+                if self.count_unique_votes(&block_hash, "commit") >= quorum {
                     if let Some(block) = self.find_block_in_messages(&block_hash) {
                         if !self.blockchain.chain.iter().any(|b| b.hash == block.hash) {
                             

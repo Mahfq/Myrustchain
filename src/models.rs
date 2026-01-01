@@ -63,7 +63,7 @@ impl Blockchain {
 
         initial_accounts.insert(String::from("Alice"), 100);
         initial_accounts.insert(String::from("Bob"), 50);
-        initial_accounts.insert(String::from("Moi"), 10);
+        initial_accounts.insert(String::from("Moi"), 75);
 
         let genesis_block = Block::new_block(0, String::from("0"), vec![]);
         
