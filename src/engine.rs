@@ -1,8 +1,10 @@
-use crate::network::{Node, ConsensusMessage};
-use crate::models::{Transaction, Block};
+use crate::consensus::message::ConsensusMessage;
+use crate::core::transaction::Transaction;
+use crate::consensus::pbft::Node;
+use crate::core::block::Block;
 use crate::config::Config;
-use std::thread::sleep;
 use std::time::Duration;
+use std::thread::sleep;
 use rand::Rng;
 
 pub struct ConsensusEngine {

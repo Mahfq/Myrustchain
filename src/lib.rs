@@ -1,4 +1,5 @@
-pub mod network;
-pub mod models;
-pub mod engine;
+pub mod core;
+pub mod utils;
+pub mod consensus;
 pub mod config;
+pub mod engine;

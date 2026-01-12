@@ -3,7 +3,7 @@ use myrustchain::config::Config;
 use rand::Rng;
 
 fn main() {
-    let nb_nodes = rand::rng().random_range(3..=10);
+    let nb_nodes = rand::rng().random_range(4..=10);
     let config = Config { total_nodes: nb_nodes, block_timeout_ms: 1000};
 
     println!("==================================================");

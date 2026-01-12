@@ -1,12 +1,7 @@
-use crate::models::{Block, Blockchain};
+use super::message::ConsensusMessage;
+use crate::core::chain::Blockchain;
+use crate::core::block::Block;
 use std::collections::HashSet;
-
-#[derive(Debug, Clone)]
-pub enum ConsensusMessage {
-    PrePrepare { block: Block, view: u32 },
-    Prepare { block_hash: String, node_id: u32 },
-    Commit { block_hash: String, node_id: u32 },
-}
 
 #[derive(Debug, Clone)]
 pub struct Node {
@@ -40,7 +35,7 @@ impl Node {
             },
 
             ConsensusMessage::Prepare { block_hash, .. } => {
-                if self.count_unique_votes(&block_hash, "prepare") == 3 {
+                if self.count_unique_votes(&block_hash, "prepare") >= quorum {
                     Some(ConsensusMessage::Commit { 
                         block_hash: block_hash.clone(), 
                         node_id: self.id 

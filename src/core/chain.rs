@@ -1,60 +1,12 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use crate::utils::hash::calculate_hash;
+use super::transaction::Transaction;
 use std::collections::HashMap;
-use sha2::{Sha256, Digest};
-
-#[derive(Debug, Clone)]
-pub struct Block {
-    pub index: u32,
-    pub timestamp: u64,
-    pub data: Vec<Transaction>,
-    pub prev_hash: String,
-    pub hash: String,
-}
+use super::block::Block;
 
 #[derive(Debug, Clone)]
 pub struct Blockchain {
     pub chain: Vec<Block>,
     pub accounts: HashMap<String, u32>
-}
-
-#[derive(Debug, Clone)]
-pub struct Transaction {
-    pub sender: String,
-    pub receiver: String,
-    pub amount: u32,
-}
-
-impl Block {
-    pub fn calcul_hash(&self) -> String {
-        let mut hasher = Sha256::new();
-        let tx_string: String = self.data
-            .iter()
-            .map(|tx| tx.to_string())
-            .collect::<Vec<String>>()
-            .join("");
-        
-        let input = format!("{}{}{}{}", self.index, self.timestamp, tx_string, self.prev_hash);
-        hasher.update(input.as_bytes());
-        format!("{:x}", hasher.finalize())
-    }
-
-    pub fn new_block(index: u32, prev_hash: String, data: Vec<Transaction>) -> Self {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs();
-
-        let mut block = Block {
-            index,
-            timestamp,
-            data,
-            prev_hash,
-            hash: String::new(),
-        };
-
-        block.hash = block.calcul_hash();
-        block
-    }
 }
 
 impl Blockchain {
@@ -104,7 +56,7 @@ impl Blockchain {
             let current = &self.chain[i];
             let previous = &self.chain[i - 1];
 
-            if current.hash != current.calcul_hash() || current.prev_hash != previous.hash {
+            if current.hash != calculate_hash(current) || current.prev_hash != previous.hash {
                 return false;
             }
         }
@@ -129,12 +81,5 @@ impl Blockchain {
             println!("│ {:<20} │ {:>7} BTC │", user, balance);
         }
         println!("└──────────────────────┴─────────────┘");
-    }
-
-}
-
-impl Transaction {
-    pub fn to_string(&self) -> String {
-        format!("{}{}{}", self.sender, self.receiver, self.amount)
     }
 }
