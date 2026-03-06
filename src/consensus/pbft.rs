@@ -2,6 +2,7 @@ use super::message::ConsensusMessage;
 use crate::core::chain::Blockchain;
 use crate::core::block::Block;
 use std::collections::HashSet;
+use tokio::net::TcpListener;
 
 #[derive(Debug, Clone)]
 pub struct Node {
@@ -110,5 +111,28 @@ impl Node {
             }
         }
         voters.len()
+    }
+
+    pub async fn start_server(self, port: u16) {
+        let address = format!("127.0.0.1:{}", port);
+        
+        let listener = match TcpListener::bind(&address).await {
+            Ok(l) => l,
+            Err(e) => {
+                log::error!("❌ Nœud {} n'a pas pu ouvrir le port {} : {}", self.id, port, e);
+                return;
+            }
+        };
+
+        log::info!("🟢 Nœud {} est en ligne et écoute sur {}", self.id, address);
+
+        loop {
+            match listener.accept().await {
+                Ok((_socket, peer_addr)) => {
+                    log::debug!("Nœud {} a reçu une connexion de {}", self.id, peer_addr);
+                }
+                Err(e) => log::error!("Erreur de connexion entrante : {}", e),
+            }
+        }
     }
 }

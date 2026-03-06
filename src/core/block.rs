@@ -1,8 +1,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use crate::utils::hash::calculate_hash;
 use super::transaction::Transaction; 
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Block {
     pub index: u32,
     pub timestamp: u64,
