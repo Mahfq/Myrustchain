@@ -2,7 +2,10 @@ use super::message::ConsensusMessage;
 use crate::core::chain::Blockchain;
 use crate::core::block::Block;
 use std::collections::HashSet;
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
+use tokio::io::AsyncReadExt;
+use tokio::net::TcpStream;
 
 #[derive(Debug, Clone)]
 pub struct Node {
@@ -17,6 +20,41 @@ impl Node {
             id,
             blockchain: Blockchain::new_blockchain(),
             messages_received: Vec::new(),
+        }
+    }
+
+    pub async fn broadcast_message(&self, msg: ConsensusMessage, total_nodes: usize) {
+        let bytes = match bincode::serialize(&msg) {
+            Ok(b) => b,
+            Err(e) => {
+                log::error!("❌ Erreur de sérialisation : {}", e);
+                return;
+            }
+        };
+
+        let base_port = 8000;
+
+        for i in 0..total_nodes {
+            if i as u32 == self.id {
+                continue; 
+            }
+
+            let port = base_port + i as u16;
+            let addr = format!("127.0.0.1:{}", port);
+            let bytes_clone = bytes.clone(); 
+
+            tokio::spawn(async move {
+                match TcpStream::connect(&addr).await {
+                    Ok(mut stream) => {
+                        if let Err(e) = stream.write_all(&bytes_clone).await {
+                            log::error!("Erreur d'écriture TCP vers {} : {}", addr, e);
+                        }
+                    }
+                    Err(e) => {
+                        log::debug!("Impossible de joindre le nœud sur {} : {}", addr, e);
+                    }
+                }
+            });
         }
     }
 
@@ -52,8 +90,14 @@ impl Node {
                         if !self.blockchain.chain.iter().any(|b| b.hash == block.hash) {
                             
                             self.blockchain.apply_block(&block);
-                            self.blockchain.chain.push(block);
+                             self.blockchain.chain.push(block.clone());
                             self.messages_received.clear();
+
+                            log::info!("✅ Nœud {} a définitivement validé le BLOC #{}", self.id, block.index);
+                            
+                            if self.id == 0 {
+                                self.blockchain.display_status(&format!("RÉSULTAT BLOC #{} (Vu par Nœud 0)", block.index));
+                            }
                         }
                     }
                 }
@@ -64,7 +108,8 @@ impl Node {
 
     fn is_block_valid(&self, block: &Block) -> bool{
         if block.prev_hash != self.blockchain.chain.last().unwrap().hash {
-            return false ;
+            log::warn!("  [Nœud {}] ❌ Bloc #{} rejeté : Le prev_hash ne correspond pas à notre dernier bloc !", self.id, block.index);
+            return false;
         }
 
         let mut temp_balances = self.blockchain.accounts.clone();
@@ -113,10 +158,10 @@ impl Node {
         voters.len()
     }
 
-    pub async fn start_server(self, port: u16) {
-        let address = format!("127.0.0.1:{}", port);
+    pub async fn start_server(mut self, port: u16, quorum: usize, total_nodes: usize) {
+        let addr = format!("127.0.0.1:{}", port);
         
-        let listener = match TcpListener::bind(&address).await {
+        let listener = match TcpListener::bind(&addr).await {
             Ok(l) => l,
             Err(e) => {
                 log::error!("❌ Nœud {} n'a pas pu ouvrir le port {} : {}", self.id, port, e);
@@ -124,12 +169,28 @@ impl Node {
             }
         };
 
-        log::info!("🟢 Nœud {} est en ligne et écoute sur {}", self.id, address);
+        log::info!("🟢 Nœud {} est en ligne et écoute sur {}", self.id, addr);
 
         loop {
             match listener.accept().await {
-                Ok((_socket, peer_addr)) => {
-                    log::debug!("Nœud {} a reçu une connexion de {}", self.id, peer_addr);
+                Ok((mut socket, peer_addr)) => {
+                    
+                    let mut buffer = Vec::new();
+                    match socket.read_to_end(&mut buffer).await {
+                        Ok(_) => {
+                            match bincode::deserialize::<ConsensusMessage>(&buffer) {
+                                Ok(msg) => {
+                                    log::debug!("Nœud {} a reçu un message de {}", self.id, peer_addr);
+                                    
+                                    if let Some(reponse) = self.receive_message(msg, quorum) {
+                                        self.broadcast_message(reponse, total_nodes).await;
+                                    }
+                                },
+                                Err(e) => log::error!("Erreur de désérialisation bincode : {}", e),
+                            }
+                        },
+                        Err(e) => log::error!("Erreur de lecture TCP : {}", e),
+                    }
                 }
                 Err(e) => log::error!("Erreur de connexion entrante : {}", e),
             }

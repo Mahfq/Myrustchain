@@ -3,6 +3,8 @@ use crate::core::transaction::Transaction;
 use crate::consensus::pbft::Node;
 use crate::core::block::Block;
 use crate::config::Config;
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpStream;
 use std::time::Duration;
 use tokio::time::sleep;
 use tokio::spawn;
@@ -25,8 +27,11 @@ impl ConsensusEngine {
             nodes.push(node.clone());
 
             let node_for_server = node.clone();
+            let quorum = config.quorum_size();
+            let total_nodes = config.total_nodes;
+
             spawn(async move {
-                node_for_server.start_server(port).await;
+                node_for_server.start_server(port, quorum, total_nodes).await;
             });
         }
 
@@ -60,45 +65,32 @@ impl ConsensusEngine {
 
         let last_hash = self.nodes[leader_id].blockchain.chain.last().unwrap().hash.clone();
         let new_block = Block::new_block(block_index, last_hash, txs);
-        let pp_msg = ConsensusMessage::PrePrepare { block: new_block, view: 0 };
+        let pp_msg = ConsensusMessage::PrePrepare { block: new_block.clone(), view: 0 };
         
-        log::info!("\n\x1b[33m[1/3] PRE-PREPARE :\x1b[0m Envoi de la proposition...");
-        let mut prepare_votes = Vec::new();
-        for node in self.nodes.iter_mut() {
-            if let Some(vote) = node.receive_message(pp_msg.clone(), quorum) {
-                prepare_votes.push(vote);
-            }
-        }
+        log::info!("\n\x1b[33m[1/3] PRE-PREPARE :\x1b[0m Le Leader diffuse la proposition via TCP...");
+        
+        let bytes = bincode::serialize(&pp_msg).unwrap();
+        let base_port = 8000;
 
-        sleep(Duration::from_millis(1000)).await;
+        for i in 0..total_nodes {
+            let port = base_port + i as u16;
+            let addr = format!("127.0.0.1:{}", port);
+            let bytes_clone = bytes.clone();
 
-        if prepare_votes.len() < quorum {
-            log::warn!("\x1b[1;31m❌ CONSENSUS ÉCHOUÉ : Le bloc contient des transactions invalides !\x1b[0m");
-            log::info!("   (Le block_index reste à {}, prochain leader...)\n", block_index);
-            sleep(Duration::from_secs(3)).await;
-            return false;
-        }
-
-        log::info!("\x1b[32m[2/3] PREPARE :\x1b[0m Quorum atteint ({} votes valides).", prepare_votes.len());
-        let mut commit_votes = Vec::new();
-        for vote in prepare_votes {
-            for node in self.nodes.iter_mut() {
-                if let Some(commit) = node.receive_message(vote.clone(), quorum) {
-                    commit_votes.push(commit);
+            tokio::spawn(async move {
+                if let Ok(mut stream) = TcpStream::connect(&addr).await {
+                    let _ = stream.write_all(&bytes_clone).await;
                 }
-            }
+            });
         }
 
-        log::info!("\x1b[32m[3/3] COMMIT :\x1b[0m Finalisation du bloc sur tous les nœuds.");
-        for commit in commit_votes {
-            for node in self.nodes.iter_mut() {
-                node.receive_message(commit.clone(), quorum);
-            }
-        }
-
-
-        self.nodes[0].blockchain.display_status(&format!("RÉSULTAT BLOC #{}", block_index));
         sleep(Duration::from_millis(self.config.block_timeout_ms)).await;
+
+        for node in self.nodes.iter_mut() {
+            node.blockchain.apply_block(&new_block);
+            node.blockchain.chain.push(new_block.clone());
+        }
+
         true
     }   
 }
