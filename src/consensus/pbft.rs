@@ -197,3 +197,62 @@ impl Node {
         }
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::transaction::Transaction;
+    use crate::core::block::Block;
+
+    fn mock_block(index: u32, prev_hash: String) -> Block {
+        Block::new_block(index, prev_hash, vec![
+            Transaction {
+                sender: "Alice".to_string(),
+                receiver: "Bob".to_string(),
+                amount: 10,
+            }
+        ])
+    }
+
+    #[test]
+    fn test_node_init() {
+        let node = Node::new(0);
+        assert_eq!(node.id, 0);
+        assert_eq!(node.blockchain.chain.len(), 1);
+    }
+
+    #[test]
+    fn test_invalid_prev_hash() {
+        let mut node = Node::new(1);
+        let bad_block = mock_block(1, "wrong_hash".to_string());
+        let msg = ConsensusMessage::PrePrepare { block: bad_block, view: 0 };
+        
+        assert!(node.receive_message(msg, 1).is_none());
+    }
+
+    #[test]
+    fn test_double_spend_protection() {
+        let mut node = Node::new(1);
+        let txs = vec![
+            Transaction { sender: "Alice".to_string(), receiver: "Bob".to_string(), amount: 80 },
+            Transaction { sender: "Alice".to_string(), receiver: "Moi".to_string(), amount: 40 },
+        ];
+        let block = Block::new_block(1, node.blockchain.chain[0].hash.clone(), txs);
+        
+        let msg = ConsensusMessage::PrePrepare { block, view: 0 };
+        assert!(node.receive_message(msg, 1).is_none());
+    }
+
+    #[test]
+    fn test_quorum_logic() {
+        let mut node = Node::new(1);
+        let hash = "test_hash".to_string();
+        let quorum = 2;
+
+        node.receive_message(ConsensusMessage::Prepare { block_hash: hash.clone(), node_id: 2 }, quorum);
+        let res = node.receive_message(ConsensusMessage::Prepare { block_hash: hash.clone(), node_id: 3 }, quorum);
+        
+        assert!(matches!(res, Some(ConsensusMessage::Commit { .. })));
+    }
+}
