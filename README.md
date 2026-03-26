@@ -36,6 +36,8 @@ src/
 └── main.rs           # Point d'entrée de l'application
 tests/
 └── blockchain_tests.rs # Tests d'intégration et unitaires
+```
+
 
 ## Installation & Utilisation
 
@@ -57,6 +59,7 @@ tests/
 Pour vérifier le bon fonctionnement du consensus et de la validation :
 ```bash
 cargo test
+```
 
 ## Scénarios de Test Couverts
 
